@@ -1,0 +1,8 @@
+[
+  { "caption": "AI Agent: Chat", "command": "ai_agent_chat" },
+  { "caption": "AI Agent: Edit Selection", "command": "ai_agent_edit" },
+  { "caption": "AI Agent: Review File", "command": "ai_agent_review" },
+  { "caption": "AI Agent: Show History", "command": "ai_agent_show_history" },
+  { "caption": "AI Agent: Show All History", "command": "ai_agent_show_all_history" },
+  { "caption": "AI Agent: Show All History Popup", "command": "ai_agent_show_all_history_popup" }
+]

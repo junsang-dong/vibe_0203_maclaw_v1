@@ -1,0 +1,4 @@
+.ai-agent/
+dist/
+node_modules/
+.DS_Store

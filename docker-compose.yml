@@ -1,0 +1,24 @@
+services:
+  maclaw:
+    build: .
+    container_name: maclaw
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - ./config:/root/.ai-agent:ro
+      - ./data:/app/.ai-agent
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: maclaw-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - maclaw
+    restart: unless-stopped

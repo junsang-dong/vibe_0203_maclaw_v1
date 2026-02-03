@@ -1,0 +1,8 @@
+[
+  { "keys": ["super+shift+a"], "command": "ai_agent_chat" },
+  { "keys": ["super+shift+e"], "command": "ai_agent_edit" },
+  { "keys": ["super+shift+r"], "command": "ai_agent_review" },
+  { "keys": ["super+shift+h"], "command": "ai_agent_show_history" },
+  { "keys": ["super+shift+l"], "command": "ai_agent_show_all_history" },
+  { "keys": ["super+shift+c"], "command": "ai_agent_show_all_history_popup" }
+]
