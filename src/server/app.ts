@@ -177,6 +177,26 @@ export function createApp() {
     res.json(session);
   });
 
+  app.post("/api/agent/sessions/:id/messages", (req, res) => {
+    const session = loadSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: "세션을 찾을 수 없습니다." });
+      return;
+    }
+    const { role, content } = req.body as { role?: SessionMessage["role"]; content?: string };
+    if (!content) {
+      res.status(400).json({ error: "content가 필요합니다." });
+      return;
+    }
+    const message: SessionMessage = {
+      role: role ?? "tool",
+      content,
+      createdAt: new Date().toISOString()
+    };
+    appendMessage(session, message);
+    res.json({ ok: true });
+  });
+
   app.post("/api/agent/terminal/request", (req, res) => {
     const { command } = req.body as { command?: string };
     if (!command) {

@@ -3,6 +3,7 @@ import threading
 import http.client
 import difflib
 import html
+import re
 import sublime
 import sublime_plugin
 
@@ -68,6 +69,234 @@ def _show_output_panel(window, content):
     panel = window.create_output_panel("ai_agent")
     panel.run_command("append", {"characters": content})
     window.run_command("show_panel", {"panel": "output.ai_agent"})
+
+def _append_session_message(session_id, role, content):
+    try:
+        payload = json.dumps({"role": role, "content": content})
+        conn = http.client.HTTPConnection(SERVER_HOST, SERVER_PORT, timeout=30)
+        conn.request(
+            "POST",
+            "/api/agent/sessions/{}/messages".format(session_id),
+            body=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        conn.getresponse()
+        conn.close()
+    except Exception:
+        return
+
+
+def _request_terminal(command):
+    try:
+        payload = json.dumps({"command": command})
+        conn = http.client.HTTPConnection(SERVER_HOST, SERVER_PORT, timeout=30)
+        conn.request(
+            "POST",
+            "/api/agent/terminal/request",
+            body=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        resp = conn.getresponse()
+        body = resp.read().decode("utf-8")
+        conn.close()
+        if resp.status != 200:
+            return None, "요청 실패: {}".format(resp.status)
+        data = json.loads(body)
+        return data, None
+    except Exception as e:
+        return None, str(e)
+
+
+def _execute_terminal(request_id, approve):
+    try:
+        payload = json.dumps({"requestId": request_id, "approve": approve})
+        conn = http.client.HTTPConnection(SERVER_HOST, SERVER_PORT, timeout=60)
+        conn.request(
+            "POST",
+            "/api/agent/terminal/execute",
+            body=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        resp = conn.getresponse()
+        body = resp.read().decode("utf-8")
+        conn.close()
+        if resp.status != 200:
+            return None, "실행 실패: {}".format(resp.status)
+        data = json.loads(body)
+        return data, None
+    except Exception as e:
+        return None, str(e)
+
+
+def _show_confirm_popup(view, html_content, on_navigate):
+    if view is None:
+        return
+    region = view.sel()[0] if view.sel() else sublime.Region(0, 0)
+    view.add_phantom(
+        "ai_agent_terminal_approval",
+        region,
+        html_content,
+        sublime.LAYOUT_BLOCK,
+        on_navigate=on_navigate
+    )
+
+
+def _hide_confirm_popup(view):
+    if view is None:
+        return
+    view.erase_phantoms("ai_agent_terminal_approval")
+
+
+def _extract_terminal_commands(text):
+    commands = []
+    for match in re.finditer(r"```(?:bash|sh|shell)\n(.*?)```", text, re.S):
+        cmd = match.group(1).strip()
+        if cmd:
+            commands.append(cmd)
+    for line in text.splitlines():
+        if line.lower().startswith("terminal:"):
+            cmd = line.split(":", 1)[1].strip()
+            if cmd:
+                commands.append(cmd)
+    return commands
+
+
+def _enqueue_terminal_commands(view, commands):
+    if view is None:
+        return
+    queue = view.settings().get("ai_agent_terminal_queue") or []
+    seen = set(view.settings().get("ai_agent_terminal_seen") or [])
+    for cmd in commands:
+        if cmd not in seen:
+            seen.add(cmd)
+            queue.append(cmd)
+    view.settings().set("ai_agent_terminal_queue", queue)
+    view.settings().set("ai_agent_terminal_seen", list(seen))
+
+
+def _process_terminal_queue(view):
+    if view is None:
+        return
+    if view.settings().get("ai_agent_terminal_active"):
+        return
+    queue = view.settings().get("ai_agent_terminal_queue") or []
+    if not queue:
+        return
+    policy = view.settings().get("ai_agent_terminal_policy") or "ask"
+    command = queue[0]
+
+    if policy == "deny":
+        queue.pop(0)
+        view.settings().set("ai_agent_terminal_queue", queue)
+        _process_terminal_queue(view)
+        return
+
+    def run_command(approve, always_policy=None):
+        if always_policy:
+            view.settings().set("ai_agent_terminal_policy", always_policy)
+        view.settings().set("ai_agent_terminal_active", True)
+
+        def worker():
+            request, error = _request_terminal(command)
+            if error:
+                sublime.set_timeout(
+                    lambda: _show_output_panel(view.window(), "\n[오류] " + error + "\n"), 0
+                )
+                finish()
+                return
+            request_id = request.get("id")
+            if not request_id:
+                sublime.set_timeout(
+                    lambda: _show_output_panel(view.window(), "\n[오류] 요청 ID 없음\n"), 0
+                )
+                finish()
+                return
+
+            result, exec_error = _execute_terminal(request_id, approve)
+            if exec_error:
+                _show_output_panel(view.window(), "\n[오류] " + exec_error + "\n")
+            else:
+                if not result.get("ok"):
+                    _show_output_panel(view.window(), "\n[정보] 실행이 거부되었습니다.\n")
+                else:
+                    res = result.get("result", {})
+                    output = (
+                        "\n[터미널 결과]\n"
+                        "command: {}\n"
+                        "exitCode: {}\n"
+                        "stdout:\n{}\n"
+                        "stderr:\n{}\n"
+                    ).format(command, res.get("exitCode"), res.get("stdout"), res.get("stderr"))
+                    _show_output_panel(view.window(), output)
+                    session_id = view.settings().get("ai_agent_last_session_id")
+                    if session_id:
+                        _append_session_message(session_id, "tool", output)
+            finish()
+
+        def finish():
+            queue.pop(0)
+            view.settings().set("ai_agent_terminal_queue", queue)
+            view.settings().set("ai_agent_terminal_active", False)
+            _process_terminal_queue(view)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    if policy == "allow":
+        run_command(True)
+        return
+
+    safe_command = html.escape(command)
+    popup_html = (
+        "<div style='font-family:-apple-system; font-size:12px;'>"
+        "<div style='display:flex; justify-content:space-between; align-items:center;'>"
+        "<h3 style='margin:0;'>터미널 실행 승인</h3>"
+        "<a href='close' style='text-decoration:none;'>✕</a>"
+        "</div>"
+        "<div style='margin:8px 0;'>아래 명령을 실행할까요?</div>"
+        "<pre style='background:#f6f6f6; padding:8px; border-radius:6px;'>"
+        "{}"
+        "</pre>"
+        "<a href='approve'>승인</a> · <a href='reject'>거부</a>"
+        "<br>"
+        "<a href='always_allow'>항상 허용</a> · <a href='always_deny'>항상 거부</a>"
+        "</div>"
+    ).format(safe_command)
+
+    def on_navigate(href):
+        if href == "close":
+            _hide_confirm_popup(view)
+            return
+        if href == "approve":
+            _hide_confirm_popup(view)
+            run_command(True)
+            return
+        if href == "reject":
+            _hide_confirm_popup(view)
+            run_command(False)
+            return
+        if href == "always_allow":
+            _hide_confirm_popup(view)
+            run_command(True, "allow")
+            return
+        if href == "always_deny":
+            _hide_confirm_popup(view)
+            run_command(False, "deny")
+            return
+
+    _show_confirm_popup(view, popup_html, on_navigate)
+
+
+def _maybe_trigger_terminal(view, chunk):
+    if view is None:
+        return
+    buffer = view.settings().get("ai_agent_response_buffer") or ""
+    buffer += chunk
+    view.settings().set("ai_agent_response_buffer", buffer)
+    commands = _extract_terminal_commands(buffer)
+    if commands:
+        _enqueue_terminal_commands(view, commands)
+        _process_terminal_queue(view)
+
 
 
 def _show_history_popup(view, html_content, on_navigate=None):
@@ -202,14 +431,20 @@ class AiAgentChatCommand(sublime_plugin.WindowCommand):
         def on_start(session_id):
             if session_id:
                 view.settings().set("ai_agent_last_session_id", session_id)
+            view.settings().set("ai_agent_terminal_active", False)
+            view.settings().set("ai_agent_terminal_queue", [])
+            view.settings().set("ai_agent_terminal_seen", [])
+            view.settings().erase("ai_agent_response_buffer")
 
         def on_delta(chunk):
             sublime.set_timeout(lambda: _show_output_panel(self.window, chunk), 0)
+            sublime.set_timeout(lambda: _maybe_trigger_terminal(view, chunk), 0)
 
         def on_final(result):
             if result and result.get("type") == "message":
                 final_text = "\n\n[완료]\n" + result.get("content", "")
                 sublime.set_timeout(lambda: _show_output_panel(self.window, final_text), 0)
+                sublime.set_timeout(lambda: _maybe_trigger_terminal(view, final_text), 0)
 
         def on_error(message):
             sublime.set_timeout(lambda: _show_output_panel(self.window, "\n[오류] " + message), 0)
@@ -239,10 +474,15 @@ class AiAgentEditCommand(sublime_plugin.TextCommand):
         def on_start(session_id):
             if session_id:
                 self.view.settings().set("ai_agent_last_session_id", session_id)
+            self.view.settings().set("ai_agent_terminal_active", False)
+            self.view.settings().set("ai_agent_terminal_queue", [])
+            self.view.settings().set("ai_agent_terminal_seen", [])
+            self.view.settings().erase("ai_agent_response_buffer")
 
         def on_delta(chunk):
             if window:
                 sublime.set_timeout(lambda: _show_output_panel(window, chunk), 0)
+            sublime.set_timeout(lambda: _maybe_trigger_terminal(self.view, chunk), 0)
 
         def on_final(result):
             if not result:
@@ -261,6 +501,7 @@ class AiAgentEditCommand(sublime_plugin.TextCommand):
             elif result.get("type") == "message" and window:
                 final_text = "\n\n[완료]\n" + result.get("content", "")
                 sublime.set_timeout(lambda: _show_output_panel(window, final_text), 0)
+                sublime.set_timeout(lambda: _maybe_trigger_terminal(self.view, final_text), 0)
 
         def on_error(message):
             if window:
@@ -301,15 +542,21 @@ class AiAgentReviewCommand(sublime_plugin.TextCommand):
         def on_start(session_id):
             if session_id:
                 self.view.settings().set("ai_agent_last_session_id", session_id)
+            self.view.settings().set("ai_agent_terminal_active", False)
+            self.view.settings().set("ai_agent_terminal_queue", [])
+            self.view.settings().set("ai_agent_terminal_seen", [])
+            self.view.settings().erase("ai_agent_response_buffer")
 
         def on_delta(chunk):
             if window:
                 sublime.set_timeout(lambda: _show_output_panel(window, chunk), 0)
+            sublime.set_timeout(lambda: _maybe_trigger_terminal(self.view, chunk), 0)
 
         def on_final(result):
             if result and result.get("type") == "message" and window:
                 final_text = "\n\n[완료]\n" + result.get("content", "")
                 sublime.set_timeout(lambda: _show_output_panel(window, final_text), 0)
+                sublime.set_timeout(lambda: _maybe_trigger_terminal(self.view, final_text), 0)
 
         def on_error(message):
             if window:
