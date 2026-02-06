@@ -1,9 +1,10 @@
-# Maclaw (Pi 기반 미니멀 AI 에이전트)
+# Maclaw (Mac용 미니 AI 에이전트)
 
-Maclaw는 Pi 철학을 계승한 미니멀 AI 에이전트입니다.
-OpenClaw와 비슷한 배포 목적을 가지며, 글로벌 사용자가 자신이 선호하는 로컬 또는 클라우드 컴퓨팅 환경에서 에이전트 기능을 활용할 수 있도록 돕습니다.
+Maclaw는 경량 코어와 최소한의 시스템 프롬프트를 기반으로 에이전트의 자기 학습과 발전을 지향하는 Pi 기반 AI 에이전트입니다. 
 
-현재는 로컬환경 (Mac + Sublime Text)에서 실행되는 MVP 단계이며, Mock/실제 LLM(OpenAI/Anthropic/Google) 선택, JSON-RPC 스트리밍(native SSE)까지 제공합니다.
+Pi 기반의 OpenClaw에 영감을 받아 시작됐지만, 보안, 비용, 거버넌스 측면에서 사용자가 좀 더 높은 수준의 통제권을 유지하기 위한 실험적 프로젝트입니다.
+
+현재는 로컬환경 (Mac + Sublime Text)에서 실행되는 MVP v1.3 단계이며, Mock/실제 LLM(OpenAI/Anthropic/Google) 선택, JSON-RPC 스트리밍(native SSE), Mac 터미널과의 상호작용 기능을 제공합니다.
 
 ## 프로젝트 구조도 (아키텍처)
 
