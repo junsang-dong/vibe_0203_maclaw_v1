@@ -1,9 +1,9 @@
 # Maclaw (Pi 기반 미니멀 AI 에이전트)
 
-Maclaw는 Pi 철학을 계승한 미니멀 AI 에이전트입니다.  
-OpenClaw와 비슷한 배포 목적을 가지며, 글로벌 사용자가 자신이 선호하는 **로컬 또는 클라우드 컴퓨팅 환경**에서 에이전트 기능을 활용할 수 있도록 돕습니다.
+Maclaw는 Pi 철학을 계승한 미니멀 AI 에이전트입니다.
+OpenClaw와 비슷한 배포 목적을 가지며, 글로벌 사용자가 자신이 선호하는 로컬 또는 클라우드 컴퓨팅 환경에서 에이전트 기능을 활용할 수 있도록 돕습니다.
 
-현재는 로컬환경 (Mac + Sublime Text)에서 실행되는 MVP 단계이며, Mock/실제 LLM(OpenAI/Anthropic/Google) 선택, JSON-RPC 스트리밍(native SSE)까지 제공합니다. 
+현재는 로컬환경 (Mac + Sublime Text)에서 실행되는 MVP 단계이며, Mock/실제 LLM(OpenAI/Anthropic/Google) 선택, JSON-RPC 스트리밍(native SSE)까지 제공합니다.
 
 ## 프로젝트 구조도 (아키텍처)
 
@@ -263,6 +263,14 @@ curl -N http://localhost:3000/rpc \
 
 ## Sublime Text 플러그인
 `sublime/README.md` 참고
+
+### 단축키 목록 (macOS)
+- `Cmd+Shift+A`: 에이전트 대화 요청
+- `Cmd+Shift+E`: 선택 영역 개선
+- `Cmd+Shift+R`: 전체 파일 리뷰
+- `Cmd+Shift+H`: 최근 세션 대화 기록 보기
+- `Cmd+Shift+L`: 전체 대화 목록 텍스트 출력
+- `Cmd+Shift+C`: 전체 대화 목록 색상 팝업
 
 ## 이번 작업 요약 (기획/빌드/수정)
 - **기획**: Maclaw 목적/범위 정의, 로컬·클라우드 실행 중심의 미니멀 에이전트 방향 확정
