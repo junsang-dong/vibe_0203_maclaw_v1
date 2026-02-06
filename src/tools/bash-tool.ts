@@ -8,7 +8,18 @@ export interface BashResult {
 
 export function runBash(command: string, cwd = process.cwd()): Promise<BashResult> {
   return new Promise((resolve) => {
-    exec(command, { cwd }, (error, stdout, stderr) => {
+    exec(
+      command,
+      {
+        cwd,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          LANG: process.env.LANG ?? "ko_KR.UTF-8",
+          LC_ALL: process.env.LC_ALL ?? "ko_KR.UTF-8"
+        }
+      },
+      (error, stdout, stderr) => {
       const exitCode = error && typeof (error as any).code === "number"
         ? (error as any).code
         : 0;
@@ -17,6 +28,7 @@ export function runBash(command: string, cwd = process.cwd()): Promise<BashResul
         stderr: stderr?.toString() ?? (error?.message ?? ""),
         exitCode
       });
-    });
+      }
+    );
   });
 }
